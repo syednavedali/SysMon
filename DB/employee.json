@@ -1,0 +1,152 @@
+{
+  "pk": {"S": "ORG#hmeorg"},
+  "sk": {"S": "EMP#eid-nr-1"},
+  "orgCode": {"S": "hmeorg"},
+  "employeeId": {"S": "eid-nr-1"},
+  "tasks": {"L": [
+    {"M": {
+      "taskId": {"S": "url-daily-repeat-1"},
+      "taskType": {"S": "URL"},
+      "url": {"S": "https://timesheet.hmeorg.com"},
+      "scheduleType": {"S": "DAILY_REPEAT"},
+      "startTime": {"S": "09:00"},
+      "interval": {"N": "120"},
+      "enabled": {"BOOL": true},
+      "description": {"S": "Check timesheet every 2 hours"}
+    }},
+    {"M": {
+      "taskId": {"S": "url-daily-once-1"},
+      "taskType": {"S": "URL"},
+      "url": {"S": "https://attendance.hmeorg.com/mark"},
+      "scheduleType": {"S": "DAILY_ONCE"},
+      "startTime": {"S": "09:30"},
+      "enabled": {"BOOL": true},
+      "description": {"S": "Mark daily attendance"}
+    }},
+    {"M": {
+      "taskId": {"S": "url-weekly-repeat-1"},
+      "taskType": {"S": "URL"},
+      "url": {"S": "https://weekly-report.hmeorg.com"},
+      "scheduleType": {"S": "WEEKLY_REPEAT"},
+      "dayOfWeek": {"S": "MONDAY"},
+      "startTime": {"S": "10:00"},
+      "interval": {"N": "60"},
+      "enabled": {"BOOL": true},
+      "description": {"S": "Weekly report with hourly updates"}
+    }},
+    {"M": {
+      "taskId": {"S": "url-weekly-once-1"},
+      "taskType": {"S": "URL"},
+      "url": {"S": "https://team-meeting.hmeorg.com"},
+      "scheduleType": {"S": "WEEKLY_ONCE"},
+      "dayOfWeek": {"S": "WEDNESDAY"},
+      "startTime": {"S": "15:00"},
+      "enabled": {"BOOL": true},
+      "description": {"S": "Weekly team meeting"}
+    }},
+    {"M": {
+      "taskId": {"S": "url-date-repeat-1"},
+      "taskType": {"S": "URL"},
+      "url": {"S": "https://monthly-review.hmeorg.com"},
+      "scheduleType": {"S": "DATE_REPEAT"},
+      "date": {"S": "2025-02-15"},
+      "startTime": {"S": "11:00"},
+      "interval": {"N": "30"},
+      "enabled": {"BOOL": true},
+      "description": {"S": "Monthly review with updates every 30 minutes"}
+    }},
+    {"M": {
+      "taskId": {"S": "url-date-once-1"},
+      "taskType": {"S": "URL"},
+      "url": {"S": "https://annual-survey.hmeorg.com"},
+      "scheduleType": {"S": "DATE_ONCE"},
+      "date": {"S": "2025-03-01"},
+      "startTime": {"S": "14:00"},
+      "enabled": {"BOOL": true},
+      "description": {"S": "Annual employee survey"}
+    }},
+    {"M": {
+      "taskId": {"S": "app-daily-repeat-1"},
+      "taskType": {"S": "APPLICATION"},
+      "applicationPath": {"S": "C:\\Program Files\\Microsoft Office\\root\\Office16\\OUTLOOK.EXE"},
+      "scheduleType": {"S": "DAILY_REPEAT"},
+      "startTime": {"S": "09:00"},
+      "interval": {"N": "180"},
+      "enabled": {"BOOL": true},
+      "description": {"S": "Check Outlook every 3 hours"}
+    }},
+    {"M": {
+      "taskId": {"S": "app-daily-once-1"},
+      "taskType": {"S": "APPLICATION"},
+      "applicationPath": {"S": "C:\\Program Files\\Microsoft Teams\\current\\Teams.exe"},
+      "scheduleType": {"S": "DAILY_ONCE"},
+      "startTime": {"S": "09:15"},
+      "enabled": {"BOOL": true},
+      "description": {"S": "Start Microsoft Teams"}
+    }},
+    {"M": {
+      "taskId": {"S": "app-weekly-repeat-1"},
+      "taskType": {"S": "APPLICATION"},
+      "applicationPath": {"S": "C:\\Program Files\\TimeTracking\\TimeTracker.exe"},
+      "scheduleType": {"S": "WEEKLY_REPEAT"},
+      "dayOfWeek": {"S": "MONDAY"},
+      "startTime": {"S": "09:00"},
+      "interval": {"N": "120"},
+      "enabled": {"BOOL": true},
+      "description": {"S": "Run time tracker with 2-hour updates"}
+    }},
+    {"M": {
+      "taskId": {"S": "app-weekly-once-1"},
+      "taskType": {"S": "APPLICATION"},
+      "applicationPath": {"S": "C:\\Program Files\\Zoom\\bin\\Zoom.exe"},
+      "scheduleType": {"S": "WEEKLY_ONCE"},
+      "dayOfWeek": {"S": "FRIDAY"},
+      "startTime": {"S": "16:00"},
+      "enabled": {"BOOL": true},
+      "description": {"S": "Weekly team retrospective"}
+    }},
+    {"M": {
+      "taskId": {"S": "app-date-repeat-1"},
+      "taskType": {"S": "APPLICATION"},
+      "applicationPath": {"S": "C:\\Program Files\\ProjectManager\\PM.exe"},
+      "scheduleType": {"S": "DATE_REPEAT"},
+      "date": {"S": "2025-02-28"},
+      "startTime": {"S": "10:00"},
+      "interval": {"N": "60"},
+      "enabled": {"BOOL": true},
+      "description": {"S": "Project reporting with hourly updates"}
+    }},
+    {"M": {
+      "taskId": {"S": "app-date-once-1"},
+      "taskType": {"S": "APPLICATION"},
+      "applicationPath": {"S": "C:\\Program Files\\PerformanceReview\\Review.exe"},
+      "scheduleType": {"S": "DATE_ONCE"},
+      "date": {"S": "2025-04-15"},
+      "startTime": {"S": "13:00"},
+      "enabled": {"BOOL": true},
+      "description": {"S": "Annual performance review application"}
+    }},
+    {"M": {
+      "taskId": {"S": "windows-login-notice-1"},
+      "taskType": {"S": "WINDOWS_LOGIN_NOTICE"},
+      "enabled": {"BOOL": true},
+      "notificationMessage": {"S": "Welcome to HME Organization!\n\nDaily Reminders:\n- Mark your attendance at 9:30 AM\n- Check timesheet every 2 hours\n- Keep Teams active during work hours\n\nWeekly Reminders:\n- Team meeting every Wednesday at 3 PM\n- Submit weekly report on Monday"},
+      "notificationTitle": {"S": "Work Schedule Reminders"}
+    }}
+  ]},
+  "settings": {"M": {
+    "uploadduration": {"N": "5"},
+    "cameracaptureduration": {"N": "5"},
+    "screenshotduration": {"N": "5"},
+    "timezone": {"S": "UTC+05:30"},
+    "workingHours": {"M": {
+      "start": {"S": "09:00"},
+      "end": {"S": "18:00"}
+    }}
+  }},
+  "lastUpdated": {"N": "1704825600000"},
+  "version": {"N": "1"},
+  "createdAt": {"N": "1704825600000"},
+  "createdBy": {"S": "admin"},
+  "lastUpdatedBy": {"S": "admin"}
+}
