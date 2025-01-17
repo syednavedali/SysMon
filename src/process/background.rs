@@ -62,7 +62,7 @@ pub async fn start_background_process() -> Result<(), Box<dyn Error>> {
     });
 
     // Initialize credentials manager
-    let credentials_manager = CredentialsManager::new("awsconf/aws_credentials.toml");
+    let credentials_manager = CredentialsManager::new();
     let aws_creds = match credentials_manager.get_credentials().await {
         Ok(creds) => {
             info!("AWS credentials loaded successfully");

