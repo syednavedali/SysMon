@@ -184,4 +184,5 @@ pub async fn get_config_from_lambda() -> Result<ConfigAws, Box<dyn StdError>> {
             Err(Box::new(e))
         }
     }
+    
 }
