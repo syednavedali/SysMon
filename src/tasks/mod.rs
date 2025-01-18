@@ -8,7 +8,7 @@ pub mod processor;
 use crate::config::ConfigAws;
 use crate::tracker::TaskTracker;
 use std::error::Error as StdError;
-use log::{error, info};
+use log::{error};
 use crate::tasks::login_notice::{process_login_notice_tasks};
 use crate::tasks::url::{ process_url_tasks};
 use crate::tasks::application::{process_application_tasks};

@@ -90,10 +90,22 @@ pub async fn start_background_process() -> Result<(), Box<dyn Error>> {
     };
 
     let mut last_config_check = Instant::now();
+    let mut last_active_time = std::time::SystemTime::now();
     let mut current_config = ConfigAws::default();
     let mut task_processor = TaskProcessor::new(s3_uploader).await?;
 
     while RUNNING.load(Ordering::SeqCst) {
+
+        // Check if system was sleeping by comparing elapsed time
+        let current_time = std::time::SystemTime::now();
+        if let Ok(elapsed) = current_time.duration_since(last_active_time) {
+            if elapsed > Duration::from_secs(120) { // If more than 2 minutes passed
+                info!("System appears to have been sleeping, resetting task timers");
+                task_processor.reset_timers();
+            }
+        }
+        last_active_time = current_time;
+
         if last_config_check.elapsed() >= Duration::from_secs(120) {
             debug!("Checking for new configuration");
             match get_config_from_lambda().await {

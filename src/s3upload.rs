@@ -1,18 +1,15 @@
-use aws_sdk_s3::{Client, Config};
-use aws_config::meta::region::RegionProviderChain;
+use aws_sdk_s3::{Client};
 use aws_config::BehaviorVersion;
 use aws_types::region::Region;
-use rusqlite::{Connection, Result as SqliteResult, params};
-use std::path::{Path, PathBuf};
+use rusqlite::{Connection, params};
+use std::path::{Path};
 use std::error::Error;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use tokio::fs as tokio_fs;
 use std::collections::HashMap;
-use bytes::Bytes;
 use log::{info, warn, error};
 use crate::orgdetails::orgdetails::get_org_details;
 
@@ -59,21 +56,7 @@ impl S3Uploader {
             bucket: bucket_name.to_string(),
         })
     }
-
-    pub async fn test_connection(&self) -> Result<(), Box<dyn Error>> {
-        info!("Testing S3 connection");
-        match self.client.list_buckets().send().await {
-            Ok(_) => {
-                info!("Successfully connected to AWS S3");
-                Ok(())
-            }
-            Err(e) => {
-                error!("Failed to connect to AWS S3: {}", e);
-                Err(Box::new(e))
-            }
-        }
-    }
-
+    
     async fn upload_object(&self, key: &str, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
         info!("Starting upload for object: {} (size: {} bytes)", key, contents.len());
 

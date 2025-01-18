@@ -1,15 +1,10 @@
 use std::error::Error;
 use std::process::Command;
 use std::os::windows::process::CommandExt; // Import for creation_flags
-use std::{env, ptr};
+use std::{env};
 use std::sync::atomic::{AtomicBool};
-use log::{error, info, warn, debug};
-use log4rs;
-use log4rs::config::{Appender, Config, Root};
-use std::error::Error as StdError; // Import StdError explicitly
+use log::{error, info};
 use anyhow::Result;
-use chrono::{Datelike, Timelike, NaiveTime};
-
 mod tasks;
 mod process;
 mod utils;
@@ -61,6 +56,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     } else {
         // This is the initial launch, spawn the background process
+        let _handle = initialize_logging("config/config.toml")?;
         info!("Initial launch - spawning background process");
 
         let current_exe = env::current_exe()?;

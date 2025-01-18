@@ -2,7 +2,6 @@ use lazy_static::lazy_static;
 use log::{error, info};
 use std::sync::RwLock;
 use std::fs;
-use std::path::PathBuf;
 use std::env;
 
 #[derive(Debug, Clone)]
