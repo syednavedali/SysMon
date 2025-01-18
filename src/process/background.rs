@@ -1,5 +1,4 @@
 // src/process/background.rs
-use crate::get_config_from_lambda;
 use crate::tasks::{process_all_tasks};
 use crate::utils::instance::ensure_single_instance;
 use std::error::Error;
@@ -9,7 +8,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use log::{error, info, debug};
 use crate::tracker::TaskTracker;
-use crate::config::ConfigAws;
+use crate::config::{get_config_from_lambda, ConfigAws};
 use crate::logsetup::logging::cleanup_old_logs;
 use crate::RUNNING;
 use crate::s3upload::S3Uploader;
@@ -108,11 +107,11 @@ pub async fn start_background_process() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-
+        info!("--------------------------------> 1");
         if let Err(e) = process_all_tasks(&current_config, &task_tracker).await {
             error!("Error processing All tasks: {}", e);
         }
-
+        info!("--------------------------------> 2");
         if let Err(e) = task_processor.process_tasks(&current_config).await {
             error!("Error performing scheduled tasks: {}", e);
         }

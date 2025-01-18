@@ -43,6 +43,7 @@ aes-gcm = "0.9"
 futures = "0.3.31"
 dirs = "5.0.1"
 toml = "0.5.11"
+parking_lot = "0.12.3"
 
 [profile.release]
 strip = "debuginfo"

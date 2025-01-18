@@ -1,7 +1,7 @@
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use crate::StdError;
+use crate::tasks::StdError;
 use crate::tracker::TaskTracker;
 use log::{debug, error, info};
 use crate::config::ConfigAws;

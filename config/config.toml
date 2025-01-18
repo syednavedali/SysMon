@@ -1,0 +1,16 @@
+[runtime]
+worker_threads = 4
+thread_stack_size_mb = 3
+max_blocking_threads = 4
+
+[process]
+enable_backtrace = true
+debug_logging = false
+
+[shutdown]
+graceful_timeout_secs = 30
+
+[aws]
+connection_pool_size = 10
+retry_attempts = 3
+timeout_secs = 30
