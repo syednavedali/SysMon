@@ -13,7 +13,6 @@ use image::{ImageBuffer, Rgba};
 use windows::Win32::Foundation::*;
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
-use windows::core::PCWSTR;
 use std::mem::size_of;
 use log::debug;
 

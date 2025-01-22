@@ -18,7 +18,7 @@ use std::os::windows::ffi::OsStrExt;
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use aes_gcm::aead::{Aead, NewAead};
 use rand::Rng;
-use std::io::{Read, Write, Seek, SeekFrom};
+use std::io::{Read, Write};
 use std::ptr;
 
 #[derive(Debug)]

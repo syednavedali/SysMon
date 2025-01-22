@@ -5,7 +5,6 @@ use nokhwa::{
 };
 use chrono::Local;
 use anyhow::{Result, Context};
-use std::path::PathBuf;
 use image::ImageBuffer;
 use log::info;
 use crate::img::imgutil::SecureFolder;

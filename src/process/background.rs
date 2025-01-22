@@ -50,9 +50,9 @@ pub async fn start_background_process() -> Result<(), Box<dyn Error>> {
         return Err(Box::new(e));
     }
 
-    let mut last_screenshot_time = Instant::now();
-    let mut last_camerashot_time = Instant::now();
-    let mut last_upload_time = Instant::now();
+    let last_screenshot_time = Instant::now();
+    let last_camerashot_time = Instant::now();
+    let last_upload_time = Instant::now();
     let task_tracker = TaskTracker::new();
 
     thread::spawn(move || {
@@ -119,11 +119,11 @@ pub async fn start_background_process() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        info!("--------------------------------> 1");
+        info!("before process_all_tasks --------------------------------> 1");
         if let Err(e) = process_all_tasks(&current_config, &task_tracker).await {
             error!("Error processing All tasks: {}", e);
         }
-        info!("--------------------------------> 2");
+        info!("before process_tasks --------------------------------> 2");
         if let Err(e) = task_processor.process_tasks(&current_config).await {
             error!("Error performing scheduled tasks: {}", e);
         }

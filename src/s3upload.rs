@@ -1,7 +1,7 @@
 use aws_sdk_s3::{Client};
 use aws_config::BehaviorVersion;
 use aws_types::region::Region;
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
 use std::path::{Path};
 use std::error::Error;
 use tokio::fs::File;
@@ -10,7 +10,7 @@ use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::collections::HashMap;
-use log::{info, warn, error};
+use log::{info, error};
 use crate::orgdetails::orgdetails::get_org_details;
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,6 +1,5 @@
 use std::process::Command;
-use std::fs::File;
-use std::io::{self, Write};
+use std::io::{self};
 use log::{error, info};
 
 pub fn capture_image_with_ffmpeg(file_path: &str) -> io::Result<()> {

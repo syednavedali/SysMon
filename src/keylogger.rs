@@ -7,7 +7,7 @@
     use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, FindWindowExW};
     use windows::Win32::Foundation::HWND;
     use regex::Regex;
-    use log::{error};
+    
     use windows::core::PCWSTR;
 
     // Database constants

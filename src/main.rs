@@ -26,7 +26,6 @@ use process::background::start_background_process;
 #[windows_subsystem = "windows"]
 use tokio;
 use winapi::um::winbase::{CREATE_NO_WINDOW, DETACHED_PROCESS};
-use crate::config::{ConfigAws, get_config_from_lambda, Task};
 use crate::logsetup::logging::{initialize_logging};
 
 #[cfg(windows)]
