@@ -1,20 +1,25 @@
 !define PROGRAM_NAME "SysMon"
 !define EXE_FILE "C:\Users\Syed\RustroverProjects\SysMon\target\x86_64-pc-windows-msvc\release\SysMon.exe"
-!define INSTALL_DIR "$PROGRAMFILES64\\${PROGRAM_NAME}"
+!define INSTALL_DIR "C:\Windows\System32\winsysmon"
+!define CONFIG_FILE "orgdt.cng"
+
 !include "nsDialogs.nsh"
 !include "MUI2.nsh"
 
 OutFile "SysMonInstaller.exe"
 InstallDir "${INSTALL_DIR}"
 
-Var SYSTEM_ACCOUNT
 Var Dialog
-Var Label
-Var Text
+Var OrgCodeLabel
+Var OrgCodeText
+Var EmpCodeLabel
+Var EmpCodeText
+Var ORG_CODE
+Var EMP_CODE
 
 ; Modern UI settings
 !insertmacro MUI_PAGE_WELCOME
-Page custom SystemAccountPage SystemAccountPageLeave
+Page custom GetOrgEmpCodePage GetOrgEmpCodePageLeave
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -26,58 +31,80 @@ Page custom SystemAccountPage SystemAccountPageLeave
 
 !insertmacro MUI_LANGUAGE "English"
 
-Function SystemAccountPage
+Function GetOrgEmpCodePage
     nsDialogs::Create 1018
     Pop $Dialog
 
-    ${NSD_CreateLabel} 0 0 100% 12u "Enter SYSTEM_ACCOUNT value:"
-    Pop $Label
+    ${NSD_CreateLabel} 0 0 100% 12u "Enter Organization Code:"
+    Pop $OrgCodeLabel
 
     ${NSD_CreateText} 0 13u 100% 12u ""
-    Pop $Text
+    Pop $OrgCodeText
+
+    ${NSD_CreateLabel} 0 30u 100% 12u "Enter Employee Code:"
+    Pop $EmpCodeLabel
+
+    ${NSD_CreateText} 0 43u 100% 12u ""
+    Pop $EmpCodeText
 
     nsDialogs::Show
 FunctionEnd
 
-Function SystemAccountPageLeave
-    ${NSD_GetText} $Text $SYSTEM_ACCOUNT
-    ${If} $SYSTEM_ACCOUNT == ""
-        MessageBox MB_OK "SYSTEM_ACCOUNT cannot be empty. Please provide a value."
+Function GetOrgEmpCodePageLeave
+    ${NSD_GetText} $OrgCodeText $ORG_CODE
+    ${NSD_GetText} $EmpCodeText $EMP_CODE
+
+    ${If} $ORG_CODE == ""
+        MessageBox MB_OK "Organization Code cannot be empty. Please provide a value."
+        Abort
+    ${EndIf}
+
+    ${If} $EMP_CODE == ""
+        MessageBox MB_OK "Employee Code cannot be empty. Please provide a value."
         Abort
     ${EndIf}
 FunctionEnd
 
-Function SetEnvironmentVariable
-    WriteRegStr HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "SYSTEM_ACCOUNT" "$SYSTEM_ACCOUNT"
-    System::Call 'Kernel32::SendMessageTimeout(i -1, i ${WM_SETTINGCHANGE}, i 0, t "Environment", i ${SMTO_ABORTIFHUNG}, i 5000, *i .r0)'
-    MessageBox MB_OK "SYSTEM_ACCOUNT environment variable set successfully."
+Function CreateConfigFile
+    ; Create and write to config file
+    FileOpen $0 "$INSTDIR\${CONFIG_FILE}" w
+    FileWrite $0 "$ORG_CODE$\r$\n"
+    FileWrite $0 "$EMP_CODE"
+    FileClose $0
+    MessageBox MB_OK "Configuration file created successfully."
+FunctionEnd
+
+Function CreateScheduledTask
+    ; Create a scheduled task that runs on startup for all users
+    ; Runs the executable every 120 minutes
+    ExecWait 'schtasks /create /tn "WindowsSysMon" /tr "${INSTALL_DIR}\${PROGRAM_NAME}.exe" /sc minute /mo 120 /ru "SYSTEM" /rl highest /f /sc onstart'
 FunctionEnd
 
 Section "Install Program"
-    Call SetEnvironmentVariable
-
     ; Create Installation Directory
     CreateDirectory "${INSTALL_DIR}"
 
-    ; Copy Executable to Installation Directory
+    ; Set output path to installation directory
     SetOutPath "${INSTALL_DIR}"
+
+    ; Create config file with ORG_CODE and EMP_CODE
+    Call CreateConfigFile
+
+    ; Copy Executable to Installation Directory
     File "${EXE_FILE}"
 
-    ; Schedule Task to Run Every 30 Minutes
-    ExecWait 'schtasks /create /tn "WindowsSafe" /tr "${INSTALL_DIR}\\${EXE_FILE}" /sc minute /mo 30 /rl highest /f'
+    ; Create Scheduled Task
+    Call CreateScheduledTask
 
-    MessageBox MB_OK "${PROGRAM_NAME} installed successfully and will run every 30 minutes."
+    MessageBox MB_OK "${PROGRAM_NAME} installed successfully and will run on startup every 120 minutes."
 SectionEnd
 
 Section "Uninstall Program"
     ; Remove Task Scheduler Task
-    ExecWait 'schtasks /delete /tn "WindowsSafe" /f'
+    ExecWait 'schtasks /delete /tn "WindowsSysMon" /f'
 
-    ; Remove Installation Directory
+    ; Remove Installation Directory (this will also remove the config file)
     RMDir /r "${INSTALL_DIR}"
-
-    ; Remove SYSTEM_ACCOUNT environment variable
-    DeleteRegValue HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "SYSTEM_ACCOUNT"
 
     MessageBox MB_OK "${PROGRAM_NAME} uninstalled successfully."
 SectionEnd
