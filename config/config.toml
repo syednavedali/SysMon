@@ -18,7 +18,7 @@ timeout_secs = 30
 # Logging Configuration
 [logging]
 # Enable/disable logging (default: true)
-enabled = true
+enabled = false
 # Log level: "error", "warn", "info", "debug", or "trace" (default: "info")
 level = "info"
 # Maximum size of each log file in bytes (default: 10MB)

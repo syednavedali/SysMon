@@ -15,6 +15,7 @@ use log4rs::{
 use serde::Deserialize;
 use log::LevelFilter;
 use std::path::PathBuf;
+use anyhow::Context;
 
 #[derive(Debug, Deserialize)]
 pub struct LogConfig {
@@ -72,7 +73,7 @@ impl LogConfig {
     }
 }
 
-pub fn initialize_logging(config_path: &str) -> Result<Handle, Box<dyn std::error::Error>> {
+pub fn initialize_logging(config_path: &str) -> anyhow::Result<Handle> {
     let config = LogConfig::from_file(config_path).unwrap_or_default();
 
     if !config.enabled {
@@ -84,7 +85,8 @@ pub fn initialize_logging(config_path: &str) -> Result<Handle, Box<dyn std::erro
     }
 
     // Create log directory if it doesn't exist
-    std::fs::create_dir_all(&config.log_dir)?;
+    std::fs::create_dir_all(&config.log_dir)
+        .context("Failed to create log directory")?;
 
     let log_file_path = config.log_dir.join("application.log");
     let pattern = "{d(%Y-%m-%d %H:%M:%S)} {l} {t} - {m}{n}";
@@ -95,7 +97,8 @@ pub fn initialize_logging(config_path: &str) -> Result<Handle, Box<dyn std::erro
         .build(
             config.log_dir.join("application.{}.log").to_str().unwrap(),
             window_size,
-        )?;
+        )
+        .context("Failed to build fixed window roller")?;
 
     let size_trigger = SizeTrigger::new(config.max_size);
     let compound_policy = CompoundPolicy::new(
@@ -105,13 +108,16 @@ pub fn initialize_logging(config_path: &str) -> Result<Handle, Box<dyn std::erro
 
     let rolling_appender = RollingFileAppender::builder()
         .encoder(Box::new(PatternEncoder::new(pattern)))
-        .build(log_file_path, Box::new(compound_policy))?;
+        .build(log_file_path, Box::new(compound_policy))
+        .context("Failed to build rolling file appender")?;
 
     let config = Config::builder()
         .appender(Appender::builder().build("rolling", Box::new(rolling_appender)))
-        .build(Root::builder().appender("rolling").build(config.get_level_filter()))?;
+        .build(Root::builder().appender("rolling").build(config.get_level_filter()))
+        .context("Failed to build logging config")?;
 
-    Ok(log4rs::init_config(config)?)
+    Ok(log4rs::init_config(config)
+        .context("Failed to initialize logging config")?)
 }
 
 pub fn cleanup_old_logs(config_path: &str) -> Result<(), Box<dyn std::error::Error>> {

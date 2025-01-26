@@ -9,6 +9,7 @@ use crate::tracker::task_execution_tracker::TaskExecutionTracker;
 use tokio::task::JoinHandle;
 use futures::future::join_all;
 use anyhow::Context;
+use webbrowser;
 
 const TASK_TIMEOUT_SECS: u64 = 300; // 5 minutes timeout
 
@@ -22,29 +23,30 @@ pub async fn process_url_tasks(config: &crate::config::ConfigAws, tracker: &Task
         return Ok(());
     }
 
-    // Initialize error tracking with detailed logging
-    debug!("Initializing shared error tracking");
-    let shared_errors = Arc::new(Mutex::new(Vec::<String>::new()));
-    let mut task_handles: Vec<(JoinHandle<()>, u64)> = Vec::new();
+    // Reuse existing execution tracker if possible
+    static EXECUTION_TRACKER: Mutex<Option<TaskExecutionTracker>> = Mutex::new(None);
+    let mut execution_tracker_guard = EXECUTION_TRACKER.lock().unwrap();
 
-    // Initialize execution tracker with detailed error handling
-    let execution_tracker = TaskExecutionTracker::new()
-        .context("Failed to initialize execution tracker")?;
-    info!("Execution tracker initialized successfully");
+    let execution_tracker = if execution_tracker_guard.is_none() {
+        let new_tracker = TaskExecutionTracker::new()
+            .context("Failed to initialize execution tracker")?;
+        *execution_tracker_guard = Some(new_tracker);
+        execution_tracker_guard.as_ref().unwrap()
+    } else {
+        execution_tracker_guard.as_ref().unwrap()
+    };
 
     // Cleanup old entries
     if let Err(e) = execution_tracker.cleanup_old_entries() {
         warn!("Failed to cleanup old entries: {}. Continuing...", e);
-    } else {
-        debug!("Successfully cleaned up old entries");
     }
-    info!("------------------> 1");
+
     // Filter and count URL tasks
     let url_tasks: Vec<_> = config.tasks.iter()
         .filter(|task| task.task_type == "URL" && task.enabled)
-        .cloned() // Clone the tasks here
+        .cloned()
         .collect();
-    info!("------------------> 2");
+
     let url_tasks_count = url_tasks.len();
     info!("Found {} enabled URL tasks to process", url_tasks_count);
 
@@ -53,16 +55,10 @@ pub async fn process_url_tasks(config: &crate::config::ConfigAws, tracker: &Task
         return Ok(());
     }
 
-    // Process each task
-    for (index, task) in url_tasks.iter().enumerate() {
-        debug!("Processing task {}/{}: id={}, type={}", 
-            index + 1, 
-            url_tasks_count,
-            task.task_id,
-            task.task_type
-        );
+    let shared_errors = Arc::new(Mutex::new(Vec::<String>::new()));
+    let mut task_handles: Vec<JoinHandle<()>> = Vec::new();
 
-        // Validate URL
+    for task in url_tasks {
         let url = match &task.url {
             Some(url) if !url.is_empty() => url.clone(),
             _ => {
@@ -71,33 +67,16 @@ pub async fn process_url_tasks(config: &crate::config::ConfigAws, tracker: &Task
             }
         };
 
-        // Check if URL is already being processed
         if tracker.is_url_active(&url) {
             info!("URL {} is already active, skipping", url);
             continue;
         }
 
-        // Schedule validation with detailed logging
-        debug!("Checking schedule for task {}: schedule_type={:?}, start_time={:?}, interval={:?}",
-            task.task_id,
-            task.schedule_type,
-            task.start_time,
-            task.interval
-        );
-
-        if !should_execute_task(task, &execution_tracker) {
+        if !should_execute_task(&task, execution_tracker) {
             info!("Task {} scheduled for later execution", task.task_id);
             continue;
         }
 
-        let interval_secs = task.interval.unwrap_or(0) * 60;
-        info!("Preparing task execution: url={}, interval={}min", url, interval_secs / 60);
-
-        // Track URL
-        tracker.add_url(url.clone());
-
-        // Clone all the necessary data before moving into async block
-        let task = task.clone();
         let task_errors = Arc::clone(&shared_errors);
         let exec_tracker = execution_tracker.clone();
         let task_id = task.task_id.clone();
@@ -105,7 +84,6 @@ pub async fn process_url_tasks(config: &crate::config::ConfigAws, tracker: &Task
         let interval = task.interval.unwrap_or(0);
         let url_clone = url.clone();
 
-        // Spawn task with timeout
         let handle = tokio::spawn(async move {
             let cleanup = || {
                 debug!("Initiating cleanup for URL: {}", url_clone);
@@ -116,26 +94,22 @@ pub async fn process_url_tasks(config: &crate::config::ConfigAws, tracker: &Task
             let process_url = async {
                 if interval == 0 {
                     // One-time task execution
-                    info!("Executing one-time task for URL: {}", url_clone);
                     execute_url_task(&url_clone, &task_id, &exec_tracker, &task_errors).await;
                 } else {
                     // Recurring task execution
                     info!("Starting recurring task for URL: {}", url_clone);
                     loop {
-                        // Check if we should execute the task
                         if should_execute_task(&task, &exec_tracker) {
                             execute_url_task(&url_clone, &task_id, &exec_tracker, &task_errors).await;
                         }
-
-                        // Sleep for a shorter duration to check more frequently
-                        tokio::time::sleep(Duration::from_secs(60)).await; // Check every minute
+                        tokio::time::sleep(Duration::from_secs(60)).await;
                     }
                 }
             };
 
             tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(TASK_TIMEOUT_SECS)) => {
-                    error!("Task for URL {} timed out after {}s", url_clone, TASK_TIMEOUT_SECS);
+                _ = tokio::time::sleep(Duration::from_secs(60)) => {
+                    execute_url_task(&url_clone, &task_id, &exec_tracker, &task_errors).await;
                         }
                 _ = process_url => {
                     info!("Task completed normally for URL: {}", url_clone);
@@ -145,21 +119,11 @@ pub async fn process_url_tasks(config: &crate::config::ConfigAws, tracker: &Task
             cleanup();
         });
 
-        task_handles.push((handle, interval));
-        info!("Task handle created for URL: {}", url);
+        task_handles.push(handle);
     }
 
-    // Handle one-time tasks completion
-    let one_time_tasks: Vec<_> = task_handles.into_iter()
-        .filter(|(_, interval)| *interval == 0)
-        .map(|(handle, _)| handle)
-        .collect();
-
-    if !one_time_tasks.is_empty() {
-        info!("Waiting for {} one-time tasks to complete", one_time_tasks.len());
-        join_all(one_time_tasks).await;
-        info!("All one-time tasks completed");
-    }
+    // Wait for one-time tasks
+    join_all(task_handles).await;
 
     // Log accumulated errors
     if let Ok(errors) = shared_errors.lock() {
@@ -180,7 +144,9 @@ async fn execute_url_task(
 ) {
     debug!("Executing URL task: {}", url);
 
-    match open::that(url) {
+    
+    //TODO: URL is opening two times every 5 minutes but seperated by 1 minutes
+    match webbrowser::open(url) {
         Ok(_) => {
             info!("Successfully opened URL: {}", url);
             if let Err(e) = exec_tracker.mark_executed(task_id) {

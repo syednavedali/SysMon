@@ -35,27 +35,15 @@ extern crate winapi;
 static RUNNING: AtomicBool = AtomicBool::new(true);
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    // Check if already running in background mode
+async fn main() -> anyhow::Result<()> {
     if env::args().any(|x| x == "--background") {
-        // Initialize logging before starting background process
-        let _handle = initialize_logging("config/config.toml")?;
+        initialize_logging("config/config.toml")?;
         info!("Starting background process...");
 
         // Start the background process
-        match start_background_process().await {
-            Ok(_) => {
-                info!("Background process completed successfully");
-                Ok(())
-            },
-            Err(e) => {
-                error!("Background process failed: {}", e);
-                Err(e)
-            }
-        }
+        start_background_process().await
     } else {
-        // This is the initial launch, spawn the background process
-        let _handle = initialize_logging("config/config.toml")?;
+        initialize_logging("config/config.toml")?;
         info!("Initial launch - spawning background process");
 
         let current_exe = env::current_exe()?;
@@ -65,16 +53,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Set creation flags for Windows to hide the window
         command.creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS);
 
-        match command.spawn() {
-            Ok(_) => {
-                info!("Background process spawned successfully. Exiting initial process.");
-                std::process::exit(0);
-                Ok(()) // Unreachable but needed for type checking
-            }
-            Err(e) => {
-                error!("Failed to spawn background process: {}", e);
-                Err(Box::new(e) as Box<dyn Error>) // Convert to Box<dyn Error>
-            }
-        }
+        command.spawn()?;
+        info!("Background process spawned successfully. Exiting initial process.");
+        std::process::exit(0)
     }
 }

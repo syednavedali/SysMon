@@ -6,13 +6,13 @@ use log::{info, error};
 use std::error::Error as StdError;
 use crate::orgdetails::orgdetails::get_org_details;
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct WorkingHours {
     pub start: String,
     pub end: String,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Settings {
     pub uploadduration: u64,
     pub cameracaptureduration: u64,
@@ -51,7 +51,7 @@ pub struct Task {
     pub notification_title: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ConfigAws {
     pub pk: String,
     pub sk: String,

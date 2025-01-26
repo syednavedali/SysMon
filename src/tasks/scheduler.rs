@@ -36,9 +36,6 @@ pub(crate) fn should_execute_task(task: &Task, tracker: &TaskExecutionTracker) -
 
     let should_execute = match task.schedule_type.as_ref().map(|s| s.as_str()) {
         Some("DAILY_ONCE") => {
-            if 1 == 1 {
-                true;
-            }
             let result = !tracker.was_executed_today(&task.task_id) && current_time >= task_time;
             debug!("DAILY_ONCE: Task {}, was_executed_today: {}, current_time >= task_time: {}, result: {}", task.task_id, !tracker.was_executed_today(&task.task_id), current_time >= task_time, result);
             result
