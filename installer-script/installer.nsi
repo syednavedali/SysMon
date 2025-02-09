@@ -1,12 +1,28 @@
-!define PROGRAM_NAME "SysMon"
+!define PROGRAM_NAME "WinSysHlp"
+!define DISPLAY_NAME "Windows System Helper"
+!define PUBLISHER "MicroWin"
 !define EXE_FILE "C:\Users\Syed\RustroverProjects\SysMon\target\x86_64-pc-windows-msvc\release\SysMon.exe"
-!define INSTALL_DIR "C:\Windows\System32\winsysmon"
+!define INSTALL_DIR "$PROGRAMFILES64\${PUBLISHER}\${PROGRAM_NAME}"
 !define CONFIG_FILE "orgdt.cng"
+!define PS_SCRIPT "script.ps1"
 
 !include "nsDialogs.nsh"
 !include "MUI2.nsh"
+!include "FileFunc.nsh"
 
-OutFile "SysMonInstaller.exe"
+; Request application privileges for Windows Vista/7/8/10
+RequestExecutionLevel admin
+
+; Add version information
+VIProductVersion "1.0.0.0"
+VIAddVersionKey "ProductName" "${DISPLAY_NAME}"
+VIAddVersionKey "CompanyName" "${PUBLISHER}"
+VIAddVersionKey "LegalCopyright" "© ${PUBLISHER}"
+VIAddVersionKey "FileDescription" "System Monitoring Application"
+VIAddVersionKey "FileVersion" "1.0.0.0"
+VIAddVersionKey "ProductVersion" "1.0.0"
+
+OutFile "WinSysMonSetup.exe"
 InstallDir "${INSTALL_DIR}"
 
 Var Dialog
@@ -19,6 +35,7 @@ Var EMP_CODE
 
 ; Modern UI settings
 !insertmacro MUI_PAGE_WELCOME
+!insertmacro MUI_PAGE_LICENSE "license.txt" ; You should create a license file
 Page custom GetOrgEmpCodePage GetOrgEmpCodePageLeave
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -30,6 +47,18 @@ Page custom GetOrgEmpCodePage GetOrgEmpCodePageLeave
 !insertmacro MUI_UNPAGE_FINISH
 
 !insertmacro MUI_LANGUAGE "English"
+
+Function .onInit
+    SetShellVarContext all    ; Install for all users
+
+    ; Check if running with admin privileges
+    UserInfo::GetAccountType
+    Pop $0
+    ${If} $0 != "admin"
+        MessageBox MB_OK|MB_ICONSTOP "Administrator rights required!"
+        Quit
+    ${EndIf}
+FunctionEnd
 
 Function GetOrgEmpCodePage
     nsDialogs::Create 1018
@@ -71,40 +100,60 @@ Function CreateConfigFile
     FileWrite $0 "$ORG_CODE$\r$\n"
     FileWrite $0 "$EMP_CODE"
     FileClose $0
-    MessageBox MB_OK "Configuration file created successfully."
-FunctionEnd
 
-Function CreateScheduledTask
-    ; Create a scheduled task that runs on startup for all users
-    ; Runs the executable every 120 minutes
-    ExecWait 'schtasks /create /tn "WindowsSysMon" /tr "${INSTALL_DIR}\${PROGRAM_NAME}.exe" /sc minute /mo 120 /ru "SYSTEM" /rl highest /f /sc onstart'
+    ; Remove restrictive NTFS permissions -  Allow everyone full control
+    ExecWait 'icacls "$INSTDIR\${CONFIG_FILE}" /inheritance:r /grant:f "Everyone":(F)' ; Everyone has Full Control
 FunctionEnd
 
 Section "Install Program"
-    ; Create Installation Directory
-    CreateDirectory "${INSTALL_DIR}"
+    SetOutPath "$INSTDIR"
 
-    ; Set output path to installation directory
-    SetOutPath "${INSTALL_DIR}"
+    ; Create required directories
+    CreateDirectory "$INSTDIR"
 
-    ; Create config file with ORG_CODE and EMP_CODE
+    ; Remove restrictive NTFS permissions from the main directory - Allow everyone full control
+    ExecWait 'icacls "$INSTDIR" /inheritance:r /grant:f "Everyone":(OI)(CI)(F)'
+
+
+    ; Install main executable
+    File "${EXE_FILE}"
+    Rename "$OUTDIR\SysMon.exe" "$OUTDIR\${PROGRAM_NAME}.exe"
+
+    ; Remove restrictive NTFS permissions from the executable - Allow everyone full control
+    ExecWait 'icacls "$OUTDIR\${PROGRAM_NAME}.exe" /inheritance:r /grant:f "Everyone":(F)'
+
+
+    ; Install PowerShell script
+    File "${PS_SCRIPT}"
+    ExecWait 'icacls "$OUTDIR\${PS_SCRIPT}" /inheritance:r /grant:f "Everyone":(F)'
+
+    ; Create config file
     Call CreateConfigFile
 
-    ; Copy Executable to Installation Directory
-    File "${EXE_FILE}"
+    ; Create uninstaller
+    WriteUninstaller "$INSTDIR\uninstall.exe"
 
-    ; Create Scheduled Task
-    Call CreateScheduledTask
+    ; Add uninstaller information to Add/Remove Programs
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PROGRAM_NAME}" \
+        "DisplayName" "${DISPLAY_NAME}"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PROGRAM_NAME}" \
+        "UninstallString" "$INSTDIR\uninstall.exe"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PROGRAM_NAME}" \
+        "DisplayIcon" "$INSTDIR\${PROGRAM_NAME}.exe"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PROGRAM_NAME}" \
+        "Publisher" "${PUBLISHER}"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PROGRAM_NAME}" \
+        "DisplayVersion" "1.0.0"
 
-    MessageBox MB_OK "${PROGRAM_NAME} installed successfully and will run on startup every 120 minutes."
+    MessageBox MB_OK "${DISPLAY_NAME} installed successfully."
 SectionEnd
 
-Section "Uninstall Program"
-    ; Remove Task Scheduler Task
-    ExecWait 'schtasks /delete /tn "WindowsSysMon" /f'
+Section "Uninstall"
+    ; Remove installation directory
+    RMDir /r "$INSTDIR"
 
-    ; Remove Installation Directory (this will also remove the config file)
-    RMDir /r "${INSTALL_DIR}"
+    ; Remove registry entries
+    DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PROGRAM_NAME}"
 
-    MessageBox MB_OK "${PROGRAM_NAME} uninstalled successfully."
+    MessageBox MB_OK "${DISPLAY_NAME} uninstalled successfully."
 SectionEnd

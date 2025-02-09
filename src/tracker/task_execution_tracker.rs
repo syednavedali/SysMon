@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 use anyhow::{Result, Context}; // Import Context
 use lazy_static::lazy_static;
-use log::info;
+use log::{info, warn, error};
 
 #[derive(Serialize, Deserialize, Default, Clone)] // Clone is important here
 struct DailyTaskExecutions {
@@ -20,7 +20,8 @@ lazy_static! {
 #[derive(Clone)]
 pub struct TaskExecutionTracker {
     storage_path: PathBuf,
-    executions: Arc<Mutex<DailyTaskExecutions>> // Store in memory copy of execution data
+    executions: Arc<Mutex<DailyTaskExecutions>>,
+    in_memory_backup: Arc<Mutex<DailyTaskExecutions>> // Backup storage
 }
 
 impl TaskExecutionTracker {
@@ -36,12 +37,57 @@ impl TaskExecutionTracker {
         storage_path.push("task_executions.json");
 
         let executions = Arc::new(Mutex::new(DailyTaskExecutions::default()));
+        let in_memory_backup = Arc::new(Mutex::new(DailyTaskExecutions::default()));
 
-        let tracker = TaskExecutionTracker { storage_path, executions };
-        info!("Loading existing executions");
-        tracker.load_executions()?;
+        let tracker = TaskExecutionTracker {
+            storage_path,
+            executions,
+            in_memory_backup
+        };
+
+        // Try to load executions with recovery mechanisms
+        if let Err(e) = tracker.load_executions_with_recovery() {
+            error!("Failed to load executions even after recovery attempts: {}", e);
+        }
+
         info!("TaskExecutionTracker initialized successfully");
         Ok(tracker)
+    }
+
+    fn load_executions_with_recovery(&self) -> Result<()> {
+        info!("Loading executions with recovery mechanisms");
+
+        // First try normal loading
+        match self.load_executions() {
+            Ok(_) => {
+                info!("Successfully loaded executions from file");
+                // Update backup
+                let current = self.executions.lock().unwrap().clone();
+                *self.in_memory_backup.lock().unwrap() = current;
+                return Ok(());
+            }
+            Err(e) => {
+                warn!("Failed to load executions normally: {}. Attempting recovery...", e);
+            }
+        }
+
+        // If loading failed, try to delete and recreate the file
+        if self.storage_path.exists() {
+            warn!("Removing corrupted execution file");
+            if let Err(e) = fs::remove_file(&self.storage_path) {
+                error!("Failed to remove corrupted file: {}", e);
+            }
+        }
+
+        // Try to restore from in-memory backup
+        let backup = self.in_memory_backup.lock().unwrap().clone();
+        *self.executions.lock().unwrap() = backup.clone();
+
+        // Save the restored/empty state
+        self.save_executions()?;
+
+        info!("Recovery completed successfully");
+        Ok(())
     }
 
     fn load_executions(&self) -> Result<()> {
@@ -64,16 +110,24 @@ impl TaskExecutionTracker {
 
     fn save_executions(&self) -> Result<()> {
         info!("Starting save_executions");
-        let executions = self.executions.lock().unwrap().clone(); // Clone data before releasing lock
-        drop(self.executions.lock().unwrap()); // Explicitly release lock
+        let executions = self.executions.lock().unwrap().clone();
 
-        // Scope the lock to minimize holding time
+        // Update in-memory backup before saving
+        *self.in_memory_backup.lock().unwrap() = executions.clone();
+
         let content = serde_json::to_string_pretty(&executions)
             .context("Failed to serialize executions to JSON")?;
 
-        fs::write(&self.storage_path, content)
-            .context("Failed to write executions to file")?;
+        // Write to a temporary file first
+        let temp_path = self.storage_path.with_extension("tmp");
+        fs::write(&temp_path, &content)
+            .context("Failed to write executions to temporary file")?;
 
+        // Rename temporary file to actual file (atomic operation)
+        fs::rename(&temp_path, &self.storage_path)
+            .context("Failed to rename temporary file to final file")?;
+
+        info!("Successfully saved executions");
         Ok(())
     }
 
@@ -84,7 +138,7 @@ impl TaskExecutionTracker {
 
         let result = executions.executions.get(task_id).map_or(false, |last_date| last_date == &today);
         info!("Task {} was{} executed today", task_id, if result {""} else {" not"});
-        result // Explicitly return the result
+        result
     }
 
     pub fn mark_executed(&self, task_id: &str) -> Result<()> {
@@ -109,7 +163,7 @@ impl TaskExecutionTracker {
                 .map_or(false, |date| (today - date).num_days() <= 30)
         });
 
-        drop(executions); //Explicitly release lock
+        drop(executions);
         self.save_executions()?;
         Ok(())
     }

@@ -116,14 +116,13 @@ impl S3Uploader {
 
         let json = serde_json::to_string(&logs)?;
         let now = Local::now();
-        let folder_path = format!("{}/{}/{}/{}/{}",
+        let folder_path = format!("{}/{}/{}/{}",
                                   get_org_details().get_org_code(),
                                   get_org_details().get_ecd(),
                                   now.format("%Y-%m-%d"),
-                                  now.format("%H-%M-%S"),
                                   "Json"
         );
-        let s3_key = format!("{}/logs.json", folder_path);
+        let s3_key = format!("{}/logs-{}.json", folder_path,  now.format("%H-%M-%S"));
 
         match self.upload_object(&s3_key, json.into_bytes()).await {
             Ok(_) => {
@@ -149,18 +148,18 @@ impl S3Uploader {
     pub async fn process_images(&self, screenshot_dir: &str, cam_dir: &str) -> Result<(), Box<dyn Error>> {
         info!("Processing images for account: {}", get_org_details().get_org_code());
         let now = Local::now();
-        let date_time = now.format("%Y-%m-%d/%H-%M-%S").to_string();
+        let date = now.format("%Y-%m-%d").to_string();
 
         info!("Processing screenshots from directory: {}", screenshot_dir);
         let screenshot_results = self.upload_directory(
             screenshot_dir,
-            &format!("{}/{}/{}/Screenshot", get_org_details().get_org_code(), get_org_details().get_ecd(), date_time)
+            &format!("{}/{}/{}/Screenshot", get_org_details().get_org_code(), get_org_details().get_ecd(), date)
         ).await?;
 
         info!("Processing camera images from directory: {}", cam_dir);
         let cam_results = self.upload_directory(
             cam_dir,
-            &format!("{}/{}/{}/Cam", get_org_details().get_org_code(), get_org_details().get_ecd(), date_time)
+            &format!("{}/{}/{}/Cam", get_org_details().get_org_code(), get_org_details().get_ecd(), date)
         ).await?;
 
         let screenshot_success = screenshot_results.values().all(|&v| v);
